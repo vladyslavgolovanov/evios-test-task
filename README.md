@@ -79,7 +79,7 @@ Isolated application checks on 2026-11-11: **74 backend tests**, **67 Playwright
 
 Live RBAC acceptance on Railway (2026-11-11): **60 HTTP checks** and real browser scenarios for all three roles passed, including admin user CRUD, manager read-only controls, member direct-URL denial and item CRUD, login/logout, and persistence after redeployment. The current Docker image built successfully with frozen dependencies. Temporary verification records were removed.
 
-[English development discussion](docs/ai-conversations.md) covers scope, implementation quality, requirements and deployment. GitHub Actions has not been verified on the final revision. The live Ghost demo and the role application are separate services; both can also be run using their documented setup instructions.
+[Style-edited conversation](docs/ai-conversations.md) contains the full user/agent message sequence from this chat in the original languages, including progress updates, mistakes and corrections. Both sides were edited for clarity; the introductory note identifies the editorial changes. GitHub Actions has not been verified on the final revision. The live Ghost demo and the role application are separate services; both can also be run using their documented setup instructions.
 
 ### Scope and retained template behavior
 
