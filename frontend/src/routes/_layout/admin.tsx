@@ -1,13 +1,18 @@
 import { useSuspenseQuery } from "@tanstack/react-query"
-import { createFileRoute, redirect } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router"
 import { Suspense } from "react"
 
 import { type UserPublic, UsersService } from "@/client"
 import AddUser from "@/components/Admin/AddUser"
 import { columns, type UserTableData } from "@/components/Admin/columns"
+import {
+  AccessDenied,
+  ProtectedPageError,
+} from "@/components/Common/AccessDenied"
 import { DataTable } from "@/components/Common/DataTable"
 import PendingUsers from "@/components/Pending/PendingUsers"
 import useAuth from "@/hooks/useAuth"
+import { can } from "@/lib/permissions"
 
 function getUsersQueryOptions() {
   return {
@@ -19,12 +24,12 @@ function getUsersQueryOptions() {
 
 export const Route = createFileRoute("/_layout/admin")({
   component: Admin,
+  errorComponent: ProtectedPageError,
   beforeLoad: async () => {
     const { data: user } = await UsersService.readUserMe()
-    if (!user.is_superuser) {
-      throw redirect({
-        to: "/",
-      })
+    return {
+      canReadUsers: can(user, "users:read"),
+      canManageUsers: can(user, "users:write"),
     }
   },
   head: () => ({
@@ -57,6 +62,8 @@ function UsersTable() {
 }
 
 function Admin() {
+  const { canReadUsers, canManageUsers } = Route.useRouteContext()
+  if (!canReadUsers) return <AccessDenied />
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
@@ -66,7 +73,7 @@ function Admin() {
             Manage user accounts and permissions
           </p>
         </div>
-        <AddUser />
+        {canManageUsers && <AddUser />}
       </div>
       <UsersTable />
     </div>

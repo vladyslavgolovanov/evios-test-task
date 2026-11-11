@@ -1,7 +1,9 @@
 import uuid
 from datetime import UTC, datetime
+from enum import StrEnum
 
-from pydantic import EmailStr
+from pydantic import EmailStr, computed_field
+from sqlalchemy import Enum as SAEnum
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -9,12 +11,31 @@ def get_datetime_utc() -> datetime:
     return datetime.now(UTC)
 
 
+class Role(StrEnum):
+    admin = "admin"
+    manager = "manager"
+    member = "member"
+
+
 # Shared properties
 class UserBase(SQLModel):
     email: EmailStr = Field(unique=True, index=True, max_length=255)
     is_active: bool = True
-    is_superuser: bool = False
+    role: Role = Field(
+        default=Role.member,
+        sa_type=SAEnum(
+            Role, native_enum=False, create_constraint=True, name="user_role"
+        ),
+        sa_column_kwargs={"server_default": "member"},
+    )
+
     full_name: str | None = Field(default=None, max_length=255)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def is_superuser(self) -> bool:
+        # Preserve existing response/item behavior without a second source of authority.
+        return self.role == Role.admin
 
 
 # Properties to receive via API on creation
@@ -32,7 +53,7 @@ class UserRegister(SQLModel):
 class UserUpdate(SQLModel):
     email: EmailStr | None = Field(default=None, max_length=255)
     is_active: bool | None = None
-    is_superuser: bool | None = None
+    role: Role | None = None
     full_name: str | None = Field(default=None, max_length=255)
     password: str | None = Field(default=None, min_length=8, max_length=128)
 
@@ -57,6 +78,7 @@ class User(UserBase, table=True):
 
 # Properties to return via API, id is always required
 class UserPublic(UserBase):
+    role: Role
     id: uuid.UUID
     created_at: datetime | None = None
 
@@ -118,7 +140,7 @@ class Token(SQLModel):
 
 # Contents of JWT token
 class TokenPayload(SQLModel):
-    sub: str | None = None
+    sub: uuid.UUID
 
 
 class NewPassword(SQLModel):

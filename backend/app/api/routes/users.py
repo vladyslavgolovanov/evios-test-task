@@ -9,12 +9,14 @@ from app.api.deps import (
     CurrentUser,
     SessionDep,
     get_current_active_superuser,
+    require_roles,
 )
 from app.core.config import settings
 from app.core.security import get_password_hash, verify_password
 from app.models import (
     Item,
     Message,
+    Role,
     UpdatePassword,
     User,
     UserCreate,
@@ -31,7 +33,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.get(
     "/",
-    dependencies=[Depends(get_current_active_superuser)],
+    dependencies=[Depends(require_roles(Role.admin, Role.manager))],
     response_model=UsersPublic,
 )
 def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
@@ -200,6 +202,8 @@ def update_user(
             status_code=404,
             detail="The user with this id does not exist in the system",
         )
+    if "role" in user_in.model_fields_set and user_in.role is None:
+        raise HTTPException(status_code=422, detail="Role cannot be null")
     if user_in.email:
         existing_user = crud.get_user_by_email(session=session, email=user_in.email)
         if existing_user and existing_user.id != user_id:

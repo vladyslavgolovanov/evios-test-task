@@ -42,7 +42,7 @@ test.describe("Admin user management", () => {
     await expect(userRow).toBeVisible()
   })
 
-  test("Create a superuser", async ({ page }) => {
+  test("Create an admin", async ({ page }) => {
     await page.goto("/admin")
 
     const email = randomEmail()
@@ -53,7 +53,7 @@ test.describe("Admin user management", () => {
     await page.getByPlaceholder("Email").fill(email)
     await page.getByPlaceholder("Password").first().fill(password)
     await page.getByPlaceholder("Password").last().fill(password)
-    await page.getByLabel("Is superuser?").check()
+    await page.getByLabel("Role", { exact: true }).selectOption("admin")
     await page.getByLabel("Is active?").check()
 
     await page.getByRole("button", { name: "Save" }).click()
@@ -63,7 +63,7 @@ test.describe("Admin user management", () => {
     await expect(page.getByRole("dialog")).not.toBeVisible()
 
     const userRow = page.getByRole("row").filter({ hasText: email })
-    await expect(userRow.getByText("Superuser")).toBeVisible()
+    await expect(userRow.getByText("Admin", { exact: true })).toBeVisible()
   })
 
   test("Edit a user successfully", async ({ page }) => {
@@ -192,7 +192,9 @@ test.describe("Admin page access control", () => {
     await page.goto("/admin")
 
     await expect(page.getByRole("heading", { name: "Users" })).not.toBeVisible()
-    await expect(page).not.toHaveURL(/\/admin/)
+    await expect(
+      page.getByRole("heading", { name: "Access Denied" }),
+    ).toBeVisible()
   })
 
   test("Superuser can access admin page", async ({ page }) => {
@@ -201,5 +203,56 @@ test.describe("Admin page access control", () => {
     await page.goto("/admin")
 
     await expect(page.getByRole("heading", { name: "Users" })).toBeVisible()
+  })
+})
+
+test.describe("Manager access", () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  test("Manager can list users but cannot manage them", async ({
+    page,
+    request,
+  }) => {
+    const base = process.env.VITE_API_URL
+    const login = await request.post(`${base}/api/v1/login/access-token`, {
+      form: { username: firstSuperuser, password: firstSuperuserPassword },
+    })
+    expect(login.ok()).toBeTruthy()
+    const adminHeaders = {
+      Authorization: `Bearer ${(await login.json()).access_token}`,
+    }
+    const email = randomEmail()
+    const password = randomPassword()
+    const created = await request.post(`${base}/api/v1/users/`, {
+      headers: adminHeaders,
+      data: { email, password, role: "manager" },
+    })
+    expect(created.ok()).toBeTruthy()
+    const user = await created.json()
+    try {
+      await logInUser(page, email, password)
+      await page.goto("/admin")
+      await expect(page.getByRole("heading", { name: "Users" })).toBeVisible()
+      await expect(page.getByRole("button", { name: "Add User" })).toHaveCount(
+        0,
+      )
+      const row = page.getByRole("row").filter({ hasText: email })
+      await expect(row.getByText("Manager", { exact: true })).toBeVisible()
+      await expect(row.getByRole("button")).toHaveCount(0)
+      const token = await page.evaluate(() =>
+        localStorage.getItem("access_token"),
+      )
+      const denied = await request.post(`${base}/api/v1/users/`, {
+        headers: { Authorization: `Bearer ${token}` },
+        data: { email: randomEmail(), password },
+      })
+      expect(denied.status()).toBe(403)
+      await page.goto("/settings")
+      await expect(page).toHaveURL(/\/settings/)
+    } finally {
+      await request.delete(`${base}/api/v1/users/${user.id}`, {
+        headers: adminHeaders,
+      })
+    }
   })
 })
