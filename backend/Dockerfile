@@ -1,13 +1,14 @@
-FROM oven/bun:1 AS frontend-build
+FROM oven/bun:1.3.12 AS frontend-build
 
 WORKDIR /app
 
 COPY package.json bun.lock /app/
 COPY frontend/package.json /app/frontend/
+COPY packages /app/packages
 
 WORKDIR /app/frontend
 
-RUN bun install
+RUN bun install --frozen-lockfile --ignore-scripts
 
 COPY ./frontend /app/frontend
 
@@ -40,10 +41,9 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 # Install dependencies
 # Ref: https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers
-RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-workspace --package app
+COPY pyproject.toml uv.lock /app/
+
+RUN uv sync --frozen --no-install-workspace --package app
 
 COPY ./backend/scripts /app/backend/scripts
 
@@ -55,10 +55,7 @@ COPY --from=frontend-build /app/backend/app/frontend /app/backend/app/frontend
 
 # Sync the project
 # Ref: https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers
-RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --package app
+RUN uv sync --frozen --package app
 
 WORKDIR /app/backend/
 
