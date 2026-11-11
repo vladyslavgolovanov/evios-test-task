@@ -29,6 +29,20 @@ Open **http://localhost:8092**. Admin uses `FIRST_SUPERUSER_PASSWORD`; `manager@
 
 `prestart.sh` applies Alembic migrations and seeds the administrator. For subsequent schema upgrades, back up your database first, then run `dc run --rm backend alembic upgrade head`. The role migration maps former superusers to `admin` and other users to `member`, preserving IDs, password hashes and item ownership. Downgrading returns to the old boolean model, where manager and member both become ordinary users.
 
+### Railway deployment
+
+Live role application: **https://rbac-production-67176560.up.railway.app**. Demo credentials are provided privately. This is separate from the Ghost blog.
+
+- Create a private `postgres:18` service with `POSTGRES_USER`, `POSTGRES_DB` and a random `POSTGRES_PASSWORD`. Mount a persistent volume at `/var/lib/postgresql`; do not add a domain or TCP proxy.
+- Create an application service from the repository root. Set `RAILWAY_DOCKERFILE_PATH=backend/Dockerfile`, `PORT=8000`, `PROJECT_NAME`, a random `SECRET_KEY`, the private PostgreSQL `DATABASE_URL`, `FIRST_SUPERUSER`, `FIRST_SUPERUSER_PASSWORD`, and `DEMO_USER_PASSWORD`. Leave `FASTAPI_ENV` and SMTP unset. Set `FRONTEND_HOST` to the generated HTTPS application URL.
+- Set the start command below and generate a domain targeting port 8000. It applies migrations and seeds missing demo accounts before starting one application worker. Existing credentials are preserved. Back up the database before schema upgrades.
+
+```sh
+sh -c 'bash scripts/prestart.sh && python -m app.seed_demo && fastapi run --host 0.0.0.0 --port ${PORT:-8000} --workers 1'
+```
+
+The current deployment uses CLI source uploads; GitHub autodeploy is not connected. Redeploy the existing application service for updates and retain the PostgreSQL service/volume. Hosting uses finite trial credit.
+
 ### Permissions and approach
 
 | Action | admin | manager | member |
@@ -59,9 +73,17 @@ dct down --volumes
 
 For frontend development/checks, use Bun 1.3.12 and the existing lockfile: `bun install --frozen-lockfile --ignore-scripts`, then `cd frontend` and run `bunx tsc --noEmit`, `bunx biome check ./`, and `VITE_API_URL= bun run build`. Existing Playwright commands and Mailpit setup are described in [frontend/README.md](frontend/README.md). The added browser tests cover metrics navigation and direct access for all roles; backend tests cover permissions, attempted escalation, role changes, seeding and migration preservation.
 
+### Submission checks and AI conversation
+
+Isolated application checks on 2026-11-11: **74 backend tests**, **67 Playwright scenarios** (no retries), backend mypy/ty/Ruff, frontend TypeScript/Biome, production build and Docker build. Fresh migration, retained-data role migration and repeatable demo seeding passed on an isolated database. Infrastructure checks passed: 9 provisioning tests, ShellCheck, Actionlint and real local Ghost/MySQL/Caddy checks for access denial and persistence. Railway live redeployment preserved a post, uploaded image and owner session; temporary verification content was removed.
+
+Live RBAC acceptance on Railway (2026-11-11): **60 HTTP checks** and real browser scenarios for all three roles passed, including admin user CRUD, manager read-only controls, member direct-URL denial and item CRUD, login/logout, and persistence after redeployment. The current Docker image built successfully with frozen dependencies. Temporary verification records were removed.
+
+[English development discussion](docs/ai-conversations.md) covers scope, implementation quality, requirements and deployment. GitHub Actions has not been verified on the final revision. The live Ghost demo and the role application are separate services; both can also be run using their documented setup instructions.
+
 ### Scope and retained template behavior
 
-The upstream development-only `/api/v1/private/users/` endpoint is intentionally retained. When `FASTAPI_ENV=development`, it can create ordinary users without authentication; never enable that mode on a public deployment. It is absent from the base-Compose launch above. Existing dependencies and CI workflows are retained; this work is not a full security audit of the template. The overall preparation/debugging time exceeded the suggested one-hour timebox. The separate Ghost/Hetzner task and redacted AI conversation delivery are still pending.
+The upstream development-only `/api/v1/private/users/` endpoint is intentionally retained. When `FASTAPI_ENV=development`, it can create ordinary users without authentication; never enable that mode on a public deployment. It is absent from the base-Compose launch above. Existing dependencies and CI workflows are retained; this work is not a full security audit of the template. The overall preparation/debugging time exceeded the suggested one-hour timebox. The separate [Ghost demo on Railway](infra/ghost/railway/README.md) is live and verified. The [VPS/tunnel automation](infra/ghost/README.md) is also included, but has not been validated on a live VPS. Permission to use any cloud provider does not establish acceptance of a managed platform as a replacement for the VPS/tunnel requirement.
 
 ## Technology Stack and Features
 
