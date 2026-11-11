@@ -1,0 +1,20 @@
+:8080 {
+	handle /ghost/api/content/* {
+		# Ghost serves its Content API on admin.url; keep read-only access public.
+		reverse_proxy ghost:2368 {
+			header_up Host {$ADMIN_DOMAIN}
+			header_up X-Forwarded-Host {$ADMIN_DOMAIN}
+			header_up X-Forwarded-Proto https
+		}
+	}
+	handle {
+		@admin path /ghost /ghost/*
+		respond @admin "Admin is available through Tailscale only" 403
+		# TLS terminates in Funnel before this loopback-only HTTP listener.
+		reverse_proxy ghost:2368 {
+			header_up Host {$BLOG_DOMAIN}
+			header_up X-Forwarded-Host {$BLOG_DOMAIN}
+			header_up X-Forwarded-Proto https
+		}
+	}
+}

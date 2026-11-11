@@ -1,0 +1,65 @@
+name: ghost
+services:
+  db:
+    image: mysql:8.0@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?required}
+      MYSQL_DATABASE: ghost
+      MYSQL_USER: ghost
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?required}
+    volumes:
+      - database:/var/lib/mysql
+    healthcheck:
+      test: [CMD-SHELL, 'MYSQL_PWD="$${MYSQL_PASSWORD}" mysql -h 127.0.0.1 -u ghost -D ghost -e "SELECT 1"']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+  ghost:
+    image: ghost:6-alpine@sha256:3af1575bb8917c6c0057beff85db92a4ac650f726956fd9de96932fea01c397c
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      url: https://${BLOG_DOMAIN:?required}
+      admin__url: https://${ADMIN_DOMAIN:?required}
+      database__client: mysql
+      database__connection__host: db
+      database__connection__user: ghost
+      database__connection__password: ${MYSQL_PASSWORD:?required}
+      database__connection__database: ghost
+    ports:
+      - "127.0.0.1:2368:2368"
+    volumes:
+      - content:/var/lib/ghost/content
+    healthcheck:
+      test: [CMD, node, -e, "require('http').get('http://127.0.0.1:2368/', {headers: {'X-Forwarded-Proto': 'https', Host: new URL(process.env.url).host}}, r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+  caddy:
+    image: caddy:2-alpine@sha256:78bd35025c7ba85961dd149ae670315129954e77abe2383ac47c89106b35ade9
+    restart: unless-stopped
+    depends_on:
+      ghost:
+        condition: service_healthy
+    environment:
+      BLOG_DOMAIN: ${BLOG_DOMAIN:?required}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?required}
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_config:/config
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+volumes:
+  database:
+  content:
+  caddy_config:

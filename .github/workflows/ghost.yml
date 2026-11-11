@@ -1,0 +1,66 @@
+name: Ghost infrastructure
+
+on:
+  pull_request:
+    paths: ["infra/ghost/**", ".github/workflows/ghost.yml"]
+  push:
+    branches: [development]
+    paths: ["infra/ghost/**", ".github/workflows/ghost.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Provisioning tests (no cloud credentials)
+        run: python3 -B -m unittest discover -s infra/ghost -p 'test_*.py' -v
+      - name: Shell checks
+        run: shellcheck infra/ghost/*.sh
+      - name: Ghost integration check
+        run: python3 -B infra/ghost/smoke_test.py
+
+  deploy:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/development'
+    needs: check
+    environment: ghost
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: ghost-deployment
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_SUBNET_ID: ${{ vars.AWS_SUBNET_ID }}
+      GHOST_NAME: ${{ vars.GHOST_NAME }}
+      GHOST_INSTANCE_TYPE: ${{ vars.GHOST_INSTANCE_TYPE }}
+      TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Authenticate to AWS
+        uses: aws-actions/configure-aws-credentials@00943011d9042930efac3dcd3a170e4273319bc8 # v5.1.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: ghost-deploy
+      - name: Connect to the private deployment network
+        uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ghost-ci
+          version: 1.104.5
+          use-cache: 'false'
+      - name: Create once, update through the tunnel
+        run: bash infra/ghost/deploy.sh
