@@ -7,10 +7,10 @@ export const roleLabels: Record<Role, string> = {
   member: "Member",
 }
 
-type Permission = "users:read" | "users:write"
+type Permission = "users:read" | "users:write" | "metrics:read"
 const permissions: Record<Role, readonly Permission[]> = {
-  admin: ["users:read", "users:write"],
-  manager: ["users:read"],
+  admin: ["users:read", "users:write", "metrics:read"],
+  manager: ["users:read", "metrics:read"],
   member: [],
 }
 

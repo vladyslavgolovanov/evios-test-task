@@ -123,6 +123,20 @@ export type Message = {
 };
 
 /**
+ * Metrics
+ */
+export type Metrics = {
+    /**
+     * Users
+     */
+    users: number;
+    /**
+     * Items
+     */
+    items: number;
+};
+
+/**
  * NewPassword
  */
 export type NewPassword = {
@@ -961,6 +975,22 @@ export type itemsUpdateItemResponses = {
 };
 
 export type itemsUpdateItemResponse = itemsUpdateItemResponses[keyof itemsUpdateItemResponses];
+
+export type metricsReadMetricsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/metrics/';
+};
+
+export type metricsReadMetricsResponses = {
+    /**
+     * Successful Response
+     */
+    200: Metrics;
+};
+
+export type metricsReadMetricsResponse = metricsReadMetricsResponses[keyof metricsReadMetricsResponses];
 
 export type privateCreateUserData = {
     body: PrivateUserCreate;
